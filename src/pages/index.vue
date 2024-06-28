@@ -1,78 +1,130 @@
 <script lang="ts" setup>
-import { DateType } from "#/types/date";
-import { DEFAULT_MONTHS, DEFAULT_DAYS } from "#/constants/date";
-import { getMonthDays, isToday, isSameDay } from "../utils/date"
+import { onMounted, ref } from 'vue'
+import { getMonthDays, isDateInRange, isToday } from '../utils/date'
+import { DEFAULT_DAYS, DEFAULT_MONTHS } from '#/constants/date'
+import type { DateType } from '#/types/date'
 
+interface SelectedDate {
+  start: string
+  end: string
+}
 
 const monthRefs = ref<HTMLElement[]>([])
-const selectedDays = ref<string[]>([])
+const selectedDate = ref<SelectedDate>({ start: '', end: '' })
+const hoveredDate = ref<string>()
 const currentYear = ref(new Date().getFullYear())
-const isPressed = ref(false)
-
 
 const checkIsToday = (date: Date) => isToday(date)
 
-const checkIsSelected = (date: Date) => {
-  return selectedDays.value.some((selectedDate) => isSameDay(new Date(selectedDate), date))
+function checkIsSelected(date: Date) {
+  return isDateInRange(
+    date,
+    new Date(selectedDate.value.start),
+    new Date(selectedDate.value.end),
+  )
 }
 
-const onMouseDown = (date: DateType['monthDay'], month: number) => {
- isPressed.value = true
-  if(date) {
-    selectedDays.value = [new Date(currentYear.value, month, date).toISOString()]
+function isHovered(date: Date) {
+  const { start, end } = selectedDate.value
+  const dateTime = date.getTime()
+  const startDate = new Date(start)
+  const startTime = startDate.getTime()
+
+  if (!hoveredDate.value || (start && end))
+    return false
+
+  if (startTime > dateTime) {
+    return isDateInRange(date, new Date(hoveredDate.value), startDate)
+  }
+  else {
+    return isDateInRange(date, startDate, new Date(hoveredDate.value))
   }
 }
 
-const onMouseEnter = (date: DateType['monthDay'], month: number) => {
-  if(isPressed.value && date) {
+function checkIsEndDate(date: Date) {
+  return date.toISOString() === selectedDate.value.end
+}
+
+function checkIsStartDate(date: Date) {
+  return date.toISOString() === selectedDate.value.start
+}
+
+function onClick(date: DateType['monthDay'], month: number) {
+  if (date) {
+    const { end, start } = selectedDate.value
     const newDate = new Date(currentYear.value, month, date)
-    const newDateISOString = newDate.toISOString()
-    if(selectedDays.value.includes(newDateISOString)) {
-      selectedDays.value = selectedDays.value.filter((selectedDate) => selectedDate !== newDateISOString)
-    } else {
-      selectedDays.value = [...selectedDays.value, newDateISOString]
+    const newTime = newDate.getTime()
+
+    const startDate = new Date(start)
+    const startTime = startDate.getTime()
+
+    if (!start || (start && end)) {
+      selectedDate.value = { start: newDate.toISOString(), end: '' }
+    }
+    else if (startTime > newTime) {
+      selectedDate.value = { start: newDate.toISOString(), end: start }
+    }
+    else {
+      selectedDate.value = { start, end: newDate.toISOString() }
     }
   }
 }
 
-const onMouseUp = () => {
-  isPressed.value = false
+function onMouseEnter(date: DateType['monthDay'], month: number) {
+  const { start, end } = selectedDate.value
+
+  if (date && (!start || !end)) {
+    hoveredDate.value = new Date(currentYear.value, month, date).toISOString()
+  }
 }
 
-
-
+function onMouseLeave() {
+  hoveredDate.value = undefined
+}
 
 onMounted(() => {
   const currentMonth = new Date().getMonth()
-  if(monthRefs.value) {
+  if (monthRefs.value) {
     const currentMonthRef = monthRefs.value[currentMonth]
     currentMonthRef.scrollIntoView({ behavior: 'smooth' })
   }
 })
-
 </script>
 
 <template>
-  <div class="calendar" ref="calendarRef">
+  <div class="calendar">
     <header class="weekdays">
-      <p v-for="day in DEFAULT_DAYS" :key="day.value">
+      <p v-for="day in DEFAULT_DAYS" :key="day.key">
         {{ day.title }}
       </p>
     </header>
-    <div v-for="month in DEFAULT_MONTHS" :key="month.value" class="month" ref="monthRefs">
-      <h2>{{ month.title }} <span>{{ currentYear }}</span></h2>
+
+    <div
+      v-for="month in DEFAULT_MONTHS"
+      :key="month.key"
+      ref="monthRefs"
+      class="month"
+    >
+      <h2>
+        {{ month.title }} <span>{{ currentYear }}</span>
+      </h2>
       <section class="monthdays">
         <div
-          v-for="date in getMonthDays(month.value + 1, currentYear)"
+          v-for="date in getMonthDays(month.key + 1, currentYear)"
           :key="date"
-          :class="['date' ,{
-            'today': date && checkIsToday(new Date(currentYear, month.value, date)),
-            'selected': date && checkIsSelected(new Date(currentYear, month.value, date))
-          }]"
-          :draggable="false"
-          @mousedown="onMouseDown(date, month.value)"
-          @mouseenter="onMouseEnter(date, month.value)"
-          @mouseup="onMouseUp"
+          class="date"
+          :class="[
+            {
+              today: date && checkIsToday(new Date(currentYear, month.key, date)),
+              selected: date && checkIsSelected(new Date(currentYear, month.key, date)),
+              hovered: date && isHovered(new Date(currentYear, month.key, date)),
+              start: date && checkIsStartDate(new Date(currentYear, month.key, date)),
+              end: date && checkIsEndDate(new Date(currentYear, month.key, date)),
+            },
+          ]"
+          @click="onClick(date, month.key)"
+          @mouseenter="onMouseEnter(date, month.key)"
+          @mouseleave="onMouseLeave"
         >
           <span v-if="date">
             {{ date }}
@@ -84,9 +136,6 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-@import 'https://unpkg.com/open-props';
-@import 'https://unpkg.com/open-props/normalize.min.css';
-
 .calendar {
   display: grid;
 
@@ -94,7 +143,7 @@ onMounted(() => {
   overflow-y: auto;
   scroll-snap-type: y mandatory;
 
-   .weekdays {
+  .weekdays {
     position: sticky;
     inset-block-start: 0;
     background: var(--surface-1);
@@ -112,7 +161,7 @@ onMounted(() => {
     }
   }
 
-   .month {
+  .month {
     scroll-snap-align: start;
 
     > h2 {
@@ -147,24 +196,48 @@ onMounted(() => {
     user-select: none;
     padding: var(--size-2);
     text-align: center;
+
     span {
+      display: inline-block;
+      border-radius: 50%;
+      text-align: center;
       font-weight: 300;
+      width: var(--size-6);
+      height: var(--size-6);
+      line-height: var(--size-6);
+
       &:hover {
         text-decoration: underline;
         cursor: pointer;
       }
     }
-     &.today {
+
+    &.today {
       span {
-        padding: var(--size-1);
         background: var(--red-4);
         color: var(--surface-1);
-        border-radius: 50%;
       }
     }
-    &.selected {
+
+    &.selected,
+    &.hovered {
       background: var(--surface-3) !important;
-      border: 1px solid var(--indigo-5);
+    }
+
+    &.start {
+      background: var(--blue-6) !important;
+    }
+
+    &.end {
+      background: var(--blue-6) !important;
+    }
+
+    &.start,
+    &.end {
+      span {
+        background: var(--blue-10);
+        color: var(--surface-6);
+      }
     }
   }
 }

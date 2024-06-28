@@ -49,3 +49,15 @@ export function isSameDay(date1: Date, date2: Date) {
     && date1.getFullYear() === date2.getFullYear()
   )
 }
+
+export function isDateInRange(dateToCheck: Date, startDate: Date, endDate: Date): boolean {
+  const checkTime = dateToCheck.getTime()
+  const startTime = startDate.getTime()
+  const endTime = endDate.getTime()
+
+  return checkTime >= startTime && checkTime <= endTime
+}
+
+export function isDateBefore(startDate: Date, endDate: Date): boolean {
+  return startDate.getTime() < endDate.getTime()
+}
